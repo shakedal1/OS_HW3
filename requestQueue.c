@@ -37,11 +37,14 @@ int dequeue(struct RequestQueue* q){
     while(q->current_size == 0){
         pthread_cond_wait(&q->notEmpty, &q->lock);
     }
-    struct Node* temp = q->front;
-    int item = temp->connfd;
+    struct Node* tmp = q->front;
+    int item = tmp->connfd;
     q->front = q->front->next;
-    free(temp);
+    free(tmp);
     q->current_size--;
+    if(q->current_size == 0){
+        q->back = NULL;
+    }
     pthread_cond_signal(&q->notFull);
     pthread_mutex_unlock(&q->lock);
     return item;
