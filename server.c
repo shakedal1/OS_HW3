@@ -1,6 +1,7 @@
 #include "segel.h"
 #include "request.h"
 #include "log.h"
+#include <pthread.h>
 
 //
 // server.c: A very, very simple web server
@@ -11,6 +12,16 @@
 // Repeatedly handles HTTP requests sent to this port number.
 // Most of the work is done within routines written in request.c
 //
+
+
+typedef struct {
+    int max_size;
+    int current_size;
+    int front;
+    int back;
+}requestQueue;
+
+
 
 // Parses command-line arguments
 void getargs(int *port, int argc, char *argv[])
@@ -25,6 +36,11 @@ void getargs(int *port, int argc, char *argv[])
 // This server currently handles all requests in the main thread.
 // You must implement a thread pool (fixed number of worker threads)
 // that process requests from a synchronized queue.
+
+typedef struct {
+
+}requestQueue;
+
 
 int main(int argc, char *argv[])
 {
