@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 #include "log.h"
 
 
@@ -17,7 +18,8 @@ struct Server_Log {
     //linked list values
     LogNode* head;
     LogNode* tail;
-    int total_chars;
+    int totalChars;
+    int debugSleepTime;
     // thread locks and conditions
     pthread_mutex_t lock;
     pthread_cond_t can_read;
@@ -29,15 +31,16 @@ struct Server_Log {
 };
 
 // Creates a new server log instance (stub)
-server_log create_log() {
+server_log create_log(int sleepTime) {
     // TODO: Allocate and initialize internal log structure - done
     server_log sl = (server_log)malloc(sizeof(struct Server_Log));
     sl->head = NULL;
     sl->tail = NULL;
-    sl->total_chars = 0;
+    sl->totalChars = 0;
     sl->currentReaders = 0;
     sl->waitingWriters = 0;
     sl->currentWriters = 0;
+    sl->debugSleepTime = sleepTime;
     pthread_mutex_init(&sl->lock, NULL);
     pthread_cond_init(&sl->can_read, NULL);
     pthread_cond_init(&sl->can_write, NULL);
@@ -54,6 +57,9 @@ void destroy_log(server_log log) {
         free(prev->entry);
         free(prev);
     }
+    pthread_mutex_destroy(&log->lock);
+    pthread_cond_destroy((&log->can_write));
+    pthread_cond_destroy((&log->can_read));
     free(log);
 }
 
@@ -68,7 +74,7 @@ int get_log(server_log log, char** dst) {
     }
     log->currentReaders++;
     pthread_mutex_unlock(&log->lock);
-    char* logData = malloc(log->total_chars + 1);
+    char* logData = malloc(log->totalChars + 1);
     char* currentLog = logData;
     LogNode* tmp = log->head;
     while(tmp != NULL){
@@ -76,9 +82,9 @@ int get_log(server_log log, char** dst) {
         currentLog += tmp->len;
         tmp = tmp->next;
     }
-    logData[log->total_chars] = '\0';
+    logData[log->totalChars] = '\0';
     *dst = logData;
-    int len = log->total_chars;
+    int len = log->totalChars;
     //reader unlock
     pthread_mutex_lock(&log->lock);
     log->currentReaders--;
@@ -102,6 +108,12 @@ void add_to_log(server_log log, const char* data, int data_len) {
     log->waitingWriters--;
     log->currentWriters = 1;
     pthread_mutex_unlock(&log->lock);
+
+    //debug sleep
+    if(log->debugSleepTime > 0){
+        sleep(log->debugSleepTime);
+    }
+
     //the new node in the log
     LogNode* newData = malloc(sizeof (struct LogNode));
     newData->entry = malloc(data_len + 1);
@@ -117,7 +129,7 @@ void add_to_log(server_log log, const char* data, int data_len) {
         log->tail->next = newData;
         log->tail = newData;
     }
-    log->total_chars += data_len;
+    log->totalChars += data_len;
     //get ready for the next request
     pthread_mutex_lock(&log->lock);
     log->currentWriters = 0;

@@ -14,10 +14,8 @@
 // Most of the work is done within routines written in request.c
 //
 
-
 // Parses command-line arguments
-void getargs(int *port, int *threadNum, int *qSize ,int argc ,char *argv[])
-{
+void getargs(int *port, int *threadNum, int *qSize,int *debugSleepTime ,int argc ,char *argv[]){
     if (argc < 4) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
         exit(1);
@@ -25,6 +23,7 @@ void getargs(int *port, int *threadNum, int *qSize ,int argc ,char *argv[])
     *port = atoi(argv[1]);
     *threadNum = atoi(argv[2]);
     *qSize = atoi(argv[3]);
+    *debugSleepTime = atoi(argv[4]);
 }
 // This server currently handles all requests in the main thread.
 // You must implement a thread pool (fixed number of worker threads)
@@ -62,18 +61,18 @@ void* workerThreadFunction(void* arg){
     return NULL;
 }
 
-int main(int argc, char *argv[])
-{
-    // Create the global server log
-    server_log log = create_log();
+int main(int argc, char *argv[]){
 
     int listenfd, connfd, port, clientlen, qSize, threadsNum;
+    int debugSleepTime = 0;
     struct sockaddr_in clientaddr;
     //get the arguments
-    getargs(&port, &threadsNum, &qSize, argc, argv);
+    getargs(&port, &threadsNum, &qSize, &debugSleepTime, argc, argv);
     //initialize the request queue
     struct RequestQueue rq;
     queueInit(&rq, qSize);
+    // Create the global server log
+    server_log log = create_log(debugSleepTime);
 
     //intialize array of threads - the thread pool
     pthread_t* threads = malloc(sizeof(pthread_t) * threadsNum);
@@ -101,6 +100,7 @@ int main(int argc, char *argv[])
         enqueue(&rq, connfd,arrival);
     }
     // Clean up the server log before exiting
+    queueDestroy(&rq);
     destroy_log(log);
     free(threads);
     // TODO: HW3 — Add cleanup code for thread pool and queue

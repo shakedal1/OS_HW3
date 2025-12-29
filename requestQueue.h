@@ -26,4 +26,5 @@ struct RequestQueue {
 void queueInit(struct RequestQueue* q, int max_size);
 void enqueue(struct RequestQueue* q, int item,struct timeval arrivalTime);
 int dequeue(struct RequestQueue* q,struct timeval* arrivalTime);
+void queueDestroy(struct RequestQueue* q);
 #endif //OS3_REQUESTQUEUE_H

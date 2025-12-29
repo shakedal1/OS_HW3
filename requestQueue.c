@@ -53,3 +53,21 @@ int dequeue(struct RequestQueue* q,struct timeval* arrivalTime){
     pthread_mutex_unlock(&q->lock);
     return item;
 }
+
+void queueDestroy(struct RequestQueue* q){
+    if(q == NULL) return;
+    struct Node* tmp = q->front;
+    while (tmp != NULL){
+        struct Node* prev = tmp;
+        tmp = tmp->next;
+        free(tmp);
+    }
+    q->front = NULL;
+    q->back = NULL;
+    q->current_size = 0;
+
+    pthread_mutex_destroy(&q->lock);
+    pthread_cond_destroy(&q->notEmpty);
+    pthread_cond_destroy(&q->notFull);
+
+}
