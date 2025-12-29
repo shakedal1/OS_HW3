@@ -11,7 +11,7 @@ void queueInit(struct RequestQueue* q, int max_size){
     pthread_cond_init(&q->notFull, NULL);
 }
 
-void enqueue(struct RequestQueue* q, int item){
+void enqueue(struct RequestQueue* q, int item,struct timeval arrivalTime){
     pthread_mutex_lock(&q->lock);
     while(q->current_size == q->max_size){
         pthread_cond_wait(&q->notFull, &q->lock);
@@ -19,6 +19,7 @@ void enqueue(struct RequestQueue* q, int item){
     struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
     newNode->connfd = item;
     newNode->next = NULL;
+    newNode->arrivalTime = arrivalTime;
     if(q->current_size == 0){
         q->front = newNode;
         q->back = newNode;
@@ -32,13 +33,16 @@ void enqueue(struct RequestQueue* q, int item){
 }
 
 
-int dequeue(struct RequestQueue* q){
+int dequeue(struct RequestQueue* q,struct timeval* arrivalTime){
     pthread_mutex_lock(&q->lock);
     while(q->current_size == 0){
         pthread_cond_wait(&q->notEmpty, &q->lock);
     }
     struct Node* tmp = q->front;
     int item = tmp->connfd;
+    if(arrivalTime != NULL){
+        *arrivalTime = tmp->arrivalTime;
+    }
     q->front = q->front->next;
     free(tmp);
     q->current_size--;

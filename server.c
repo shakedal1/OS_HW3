@@ -26,15 +26,18 @@ void getargs(int *port, int *threadNum, int *qSize ,int argc ,char *argv[])
     *threadNum = atoi(argv[2]);
     *qSize = atoi(argv[3]);
 }
-// TODO: HW3 — Initialize thread pool and request queue
 // This server currently handles all requests in the main thread.
 // You must implement a thread pool (fixed number of worker threads)
 // that process requests from a synchronized queue.
 void* workerThreadFunction(void* arg){
+    //get arguments
     void** args = (void**) arg;
     struct RequestQueue* rq = (struct RequestQueue*) args[0];
     server_log log = (server_log)args[1];
     int threadId = *((int*)args[2]);
+    //free memory of arguments
+    free(args[2]);
+    free(args);
 
     threads_stats t = malloc(sizeof(struct Threads_stats));
     t->id = threadId;             // Thread ID (placeholder)
@@ -46,9 +49,14 @@ void* workerThreadFunction(void* arg){
 
     //try to catch requests from the queue and handle them
     while(1) {
-        int connfd = dequeue(rq);
-        time_stats dum;
-        requestHandle(connfd, dum, t, log);
+        struct timeval arrived;
+        struct timeval delivered;
+        int connfd = dequeue(rq,&arrived);
+        gettimeofday(&delivered,NULL);
+        time_stats tmStat;
+        tmStat.task_arrival = arrived;
+        tmStat.task_dispatch = delivered;
+        requestHandle(connfd, tmStat, t, log);
         Close(connfd);
     }
     return NULL;
@@ -84,31 +92,16 @@ int main(int argc, char *argv[])
         }
     }
 
-
-
-
     listenfd = Open_listenfd(port);
     while (1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*) &clientlen);
-        enqueue(&rq, connfd);
-        // TODO: HW3 — Record the request arrival time here
-
-        // DEMO PURPOSE ONLY:
-        // This is a dummy request handler that immediately processes
-        // the request in the main thread without concurrency.
-        // Replace this with logic to enqueue the connection and let
-        // a worker thread process it from the queue.
-
-
-
-        // gettimeofday(&arrival, NULL);
-
-
+        struct timeval arrival;
+        gettimeofday(&arrival, NULL);
+        enqueue(&rq, connfd,arrival);
     }
-
     // Clean up the server log before exiting
     destroy_log(log);
-
+    free(threads);
     // TODO: HW3 — Add cleanup code for thread pool and queue
 }

@@ -134,6 +134,8 @@ void requestHandle(int fd, time_stats tm_stats, threads_stats t_stats, server_lo
     void *body_content = NULL;
     int body_len = 0;
     char resp_headers[MAXBUF];
+    //update thread requests
+    t_stats->total_req++;
 
     Rio_readinitb(&rio, fd);
     Rio_readlineb(&rio, buf, MAXLINE);
@@ -149,6 +151,7 @@ void requestHandle(int fd, time_stats tm_stats, threads_stats t_stats, server_lo
         }
 
         if (is_static) {
+            t_stats->stat_req++;
             if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
                 requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file", tm_stats, t_stats);
                 return;
@@ -163,6 +166,7 @@ void requestHandle(int fd, time_stats tm_stats, threads_stats t_stats, server_lo
             sprintf(resp_headers + strlen(resp_headers), "Content-Length: %d\r\n", body_len);
             sprintf(resp_headers + strlen(resp_headers), "Content-Type: %s\r\n", filetype);
         } else {
+            t_stats->dynm_req++;
             if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
                 requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program", tm_stats, t_stats);
                 return;
@@ -172,8 +176,18 @@ void requestHandle(int fd, time_stats tm_stats, threads_stats t_stats, server_lo
             sprintf(resp_headers, "HTTP/1.0 200 OK\r\n");
             sprintf(resp_headers + strlen(resp_headers), "Server: OS-HW3 Web Server\r\n");
         }
+        //log start time
+        gettimeofday(&tm_stats.log_enter,NULL);
+        char newLog[MAXLINE];
+        sprintf(newLog,"%s %s\n",method,uri);
+        add_to_log(log,newLog,strlen(newLog));
+        gettimeofday(&tm_stats.log_exit,NULL);
+
     } else if (strcasecmp(method, "POST") == 0) {
+        t_stats->post_req++;
+        gettimeofday(&tm_stats.log_enter,NULL);
         body_len = get_log(log, (char**)&body_content);
+        gettimeofday(&tm_stats.log_exit,NULL);
 
         sprintf(resp_headers, "HTTP/1.0 200 OK\r\n");
         sprintf(resp_headers + strlen(resp_headers), "Server: OS-HW3 Web Server\r\n");
