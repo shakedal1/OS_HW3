@@ -23,7 +23,13 @@ void getargs(int *port, int *threadNum, int *qSize,int *debugSleepTime ,int argc
     *port = atoi(argv[1]);
     *threadNum = atoi(argv[2]);
     *qSize = atoi(argv[3]);
-    *debugSleepTime = atoi(argv[4]);
+    if(argc > 4){
+        *debugSleepTime = atoi(argv[4]);
+    }
+    if(*threadNum <= 0|| *qSize <= 0 || *debugSleepTime < 0){
+        fprintf(stderr,"Error: invalid number of threads or size or sleep time");
+        exit(1);
+    }
 }
 // This server currently handles all requests in the main thread.
 // You must implement a thread pool (fixed number of worker threads)
