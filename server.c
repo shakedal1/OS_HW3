@@ -1,6 +1,8 @@
 #include "segel.h"
 #include "request.h"
 #include "log.h"
+#include "requestQueue.h"
+#include <pthread.h>
 
 //
 // server.c: A very, very simple web server
@@ -13,63 +15,99 @@
 //
 
 // Parses command-line arguments
-void getargs(int *port, int argc, char *argv[])
-{
-    if (argc < 2) {
+void getargs(int *port, int *threadNum, int *qSize,int *debugSleepTime ,int argc ,char *argv[]){
+    if (argc < 4) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
         exit(1);
     }
     *port = atoi(argv[1]);
+    *threadNum = atoi(argv[2]);
+    *qSize = atoi(argv[3]);
+    if(argc > 4){
+        *debugSleepTime = atoi(argv[4]);
+    }
+    if(*threadNum <= 0|| *qSize <= 0 || *debugSleepTime < 0){
+        fprintf(stderr,"Error: invalid number of threads or size or sleep time");
+        exit(1);
+    }
 }
-// TODO: HW3 — Initialize thread pool and request queue
 // This server currently handles all requests in the main thread.
 // You must implement a thread pool (fixed number of worker threads)
 // that process requests from a synchronized queue.
+void* workerThreadFunction(void* arg){
+    //get arguments
+    void** args = (void**) arg;
+    struct RequestQueue* rq = (struct RequestQueue*) args[0];
+    server_log log = (server_log)args[1];
+    int threadId = *((int*)args[2]);
+    //free memory of arguments
+    free(args[2]);
+    free(args);
 
-int main(int argc, char *argv[])
-{
-    // Create the global server log
-    server_log log = create_log();
+    threads_stats t = malloc(sizeof(struct Threads_stats));
+    t->id = threadId;             // Thread ID (placeholder)
+    t->stat_req = 0;       // Static request count
+    t->dynm_req = 0;       // Dynamic request count
+    t->total_req = 0;      // Total request count
+    t->post_req = 0;       // POST request count
 
-    int listenfd, connfd, port, clientlen;
+
+    //try to catch requests from the queue and handle them
+    while(1) {
+        struct timeval arrived;
+        struct timeval delivered;
+        int connfd = dequeue(rq,&arrived);
+        gettimeofday(&delivered,NULL);
+        time_stats tmStat;
+        tmStat.task_arrival = arrived;
+        tmStat.task_dispatch = delivered;
+        requestHandle(connfd, tmStat, t, log);
+        Close(connfd);
+    }
+    return NULL;
+}
+
+int main(int argc, char *argv[]){
+
+    int listenfd, connfd, port, clientlen, qSize, threadsNum;
+    int debugSleepTime = 0;
     struct sockaddr_in clientaddr;
+    //get the arguments
+    getargs(&port, &threadsNum, &qSize, &debugSleepTime, argc, argv);
+    //initialize the request queue
+    struct RequestQueue rq;
+    queueInit(&rq, qSize);
+    // Create the global server log
+    server_log log = create_log(debugSleepTime);
 
-    getargs(&port, argc, argv);
-
-
+    //intialize array of threads - the thread pool
+    pthread_t* threads = malloc(sizeof(pthread_t) * threadsNum);
+    for (int i = 0; i < threadsNum; ++i) {
+        //create each worker thread arguments
+        int* id_ptr = malloc(sizeof(int));
+        *id_ptr = i;
+        void** threadArgs = malloc(3 * sizeof(void*));
+        threadArgs[0] = (void*)&rq;
+        threadArgs[1] = (void*)log;
+        threadArgs[2] = (void*)id_ptr;
+        //create the worker thread
+        if(pthread_create(&threads[i], NULL, workerThreadFunction, (void*)threadArgs) != 0) {
+            fprintf(stderr, "Error creating thread\n");
+            exit(1);
+        }
+    }
 
     listenfd = Open_listenfd(port);
     while (1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*) &clientlen);
-
-        // TODO: HW3 — Record the request arrival time here
-
-        // DEMO PURPOSE ONLY:
-        // This is a dummy request handler that immediately processes
-        // the request in the main thread without concurrency.
-        // Replace this with logic to enqueue the connection and let
-        // a worker thread process it from the queue.
-
-        threads_stats t = malloc(sizeof(struct Threads_stats));
-        t->id = 0;             // Thread ID (placeholder)
-        t->stat_req = 0;       // Static request count
-        t->dynm_req = 0;       // Dynamic request count
-        t->total_req = 0;      // Total request count
-
-        time_stats dum;
-
-        // gettimeofday(&arrival, NULL);
-
-        // Call the request handler (immediate in main thread — DEMO ONLY)
-        requestHandle(connfd, dum, t, log);
-
-        free(t); // Cleanup
-        Close(connfd); // Close the connection
+        struct timeval arrival;
+        gettimeofday(&arrival, NULL);
+        enqueue(&rq, connfd,arrival);
     }
-
     // Clean up the server log before exiting
+    queueDestroy(&rq);
     destroy_log(log);
-
+    free(threads);
     // TODO: HW3 — Add cleanup code for thread pool and queue
 }
